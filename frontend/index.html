@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Estúdio BDD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://unpkg.com/vue@3.4.38/dist/vue.global.prod.js"></script>
+</head>
+<body>
+<div id="app" v-cloak>
+
+  <!-- ===== Topo: seleção do usuário de demonstração ===== -->
+  <header class="topo">
+    <a class="marca" href="#" @click.prevent="irProjetos">Estúdio <b>BDD</b></a>
+    <nav class="trilha">
+      <a href="#" @click.prevent="irProjetos">Projetos</a>
+      <template v-if="projeto && view !== 'projetos'">
+        <span>›</span><a href="#" @click.prevent="abrirProjeto(projeto.id)">{{ projeto.nome }}</a>
+      </template>
+      <template v-if="historia && view === 'historia'">
+        <span>›</span><span>{{ historia.titulo }}</span>
+      </template>
+    </nav>
+    <label class="usuario">
+      Usuário atual
+      <select v-model.number="usuarioId" @change="salvarUsuario">
+        <option v-for="u in usuarios" :key="u.id" :value="u.id">{{ u.nome }}</option>
+      </select>
+    </label>
+  </header>
+
+  <div v-if="aviso" class="aviso" :class="aviso.tipo" @click="aviso = null">
+    <strong>{{ aviso.tipo === 'erro' ? 'Não foi possível' : 'Pronto' }}:</strong> {{ aviso.texto }}
+  </div>
+
+  <main>
+    <!-- ===== Lista de projetos ===== -->
+    <section v-if="view === 'projetos'">
+      <h1>Projetos</h1>
+      <div class="grade">
+        <article v-for="p in projetos" :key="p.id" class="cartao clicavel" @click="abrirProjeto(p.id)">
+          <h3>{{ p.nome }}</h3>
+          <p class="suave">{{ p.descricao || 'Sem descrição' }}</p>
+        </article>
+        <p v-if="!projetos.length" class="suave">Nenhum projeto ainda.</p>
+      </div>
+
+      <details class="formulario">
+        <summary>Novo projeto</summary>
+        <form @submit.prevent="criarProjeto">
+          <label>Nome <input v-model="novoProjeto.nome" required></label>
+          <label>Descrição <input v-model="novoProjeto.descricao"></label>
+          <label>Contexto do domínio (glossário)
+            <textarea v-model="novoProjeto.contextoDominio" rows="3"></textarea></label>
+          <button class="primario">Criar projeto</button>
+        </form>
+      </details>
+    </section>
+
+    <!-- ===== Projeto: histórias + resumo ===== -->
+    <section v-if="view === 'projeto' && projeto">
+      <h1>{{ projeto.nome }}</h1>
+      <p class="suave">{{ projeto.descricao }}</p>
+      <p v-if="projeto.contextoDominio" class="contexto">{{ projeto.contextoDominio }}</p>
+
+      <div class="abas">
+        <button :class="{ ativa: aba === 'historias' }" @click="aba = 'historias'">Histórias</button>
+        <button :class="{ ativa: aba === 'resumo' }" @click="carregarResumo">Resumo</button>
+      </div>
+
+      <div v-if="aba === 'historias'">
+        <div class="barra">
+          <label>Prioridade
+            <select v-model="filtroPrioridade" @change="carregarHistorias">
+              <option value="">Todas</option>
+              <option>ALTA</option><option>MEDIA</option><option>BAIXA</option>
+            </select>
+          </label>
+        </div>
+
+        <table class="tabela">
+          <thead><tr><th>História</th><th>Prioridade</th><th>Autor</th><th>Cenários</th><th>Sugestões pendentes</th></tr></thead>
+          <tbody>
+            <tr v-for="h in historias" :key="h.id" class="clicavel" @click="abrirHistoria(h.id)">
+              <td><b>{{ h.titulo }}</b></td>
+              <td><span class="selo" :class="h.prioridade">{{ h.prioridade }}</span></td>
+              <td>{{ h.autorNome }}</td>
+              <td>{{ h.qtdCenarios }}</td>
+              <td><span :class="{ alerta: h.qtdSugestoesPendentes > 0 }">{{ h.qtdSugestoesPendentes }}</span></td>
+            </tr>
+            <tr v-if="!historias.length"><td colspan="5" class="suave">Nenhuma história com esse filtro.</td></tr>
+          </tbody>
+        </table>
+
+        <details class="formulario">
+          <summary>Nova história</summary>
+          <form @submit.prevent="criarHistoria">
+            <label>Título <input v-model="novaHistoria.titulo" required></label>
+            <label><b>Como</b> <input v-model="novaHistoria.papel" placeholder="analista"></label>
+            <label><b>Quero</b> <input v-model="novaHistoria.objetivo"></label>
+            <label><b>Para</b> <input v-model="novaHistoria.beneficio"></label>
+            <label>Prioridade
+              <select v-model="novaHistoria.prioridade"><option>ALTA</option><option>MEDIA</option><option>BAIXA</option></select>
+            </label>
+            <button class="primario">Criar história</button>
+          </form>
+        </details>
+      </div>
+
+      <div v-if="aba === 'resumo' && resumo" class="resumo">
+        <div class="numero"><span>{{ resumo.totalHistorias }}</span>histórias</div>
+        <div class="cartao">
+          <h3>Cenários por origem</h3>
+          <div v-for="(v, k) in resumo.cenariosPorOrigem" :key="k" class="linha-barra">
+            <span>{{ rotulo(k) }}</span><div class="barra-fundo"><div class="barra-cheia" :style="largura(v, resumo.cenariosPorOrigem)"></div></div><b>{{ v }}</b>
+          </div>
+        </div>
+        <div class="cartao">
+          <h3>Sugestões por decisão</h3>
+          <div v-for="(v, k) in resumo.sugestoesPorDecisao" :key="k" class="linha-barra">
+            <span>{{ rotulo(k) }}</span><div class="barra-fundo"><div class="barra-cheia" :style="largura(v, resumo.sugestoesPorDecisao)"></div></div><b>{{ v }}</b>
+          </div>
+        </div>
+        <div class="cartao">
+          <h3>Motivos de rejeição mais frequentes</h3>
+          <div v-for="(v, k) in resumo.motivosRejeicao" :key="k" class="linha-barra">
+            <span>{{ rotulo(k) }}</span><div class="barra-fundo"><div class="barra-cheia" :style="largura(v, resumo.motivosRejeicao)"></div></div><b>{{ v }}</b>
+          </div>
+          <p v-if="!Object.keys(resumo.motivosRejeicao).length" class="suave">Nenhuma rejeição ainda.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== História: cenários (esquerda) e sugestões (direita) ===== -->
+    <section v-if="view === 'historia' && historia">
+      <div class="cabecalho-historia">
+        <div>
+          <h1>{{ historia.titulo }} <span class="selo" :class="historia.prioridade">{{ historia.prioridade }}</span></h1>
+          <p class="suave">Autor: {{ historia.autorNome }}
+            <span v-if="historia.autorId !== usuarioId" class="alerta"> · você não é o autor: a API vai bloquear edições</span></p>
+        </div>
+        <div class="acoes">
+          <button @click="exportar">Exportar .feature</button>
+          <button @click="editarHistoria">Editar</button>
+          <button class="perigo" @click="excluirHistoria">Excluir</button>
+        </div>
+      </div>
+
+      <div v-if="!historiaEdicao" class="narrativa">
+        <b>Como</b> {{ historia.papel }}<br><b>Quero</b> {{ historia.objetivo }}<br><b>Para</b> {{ historia.beneficio }}
+      </div>
+      <form v-else class="formulario aberto" @submit.prevent="salvarHistoria">
+        <label>Título <input v-model="historiaEdicao.titulo"></label>
+        <label><b>Como</b> <input v-model="historiaEdicao.papel"></label>
+        <label><b>Quero</b> <input v-model="historiaEdicao.objetivo"></label>
+        <label><b>Para</b> <input v-model="historiaEdicao.beneficio"></label>
+        <label>Prioridade
+          <select v-model="historiaEdicao.prioridade"><option>ALTA</option><option>MEDIA</option><option>BAIXA</option></select>
+        </label>
+        <div class="acoes"><button class="primario">Salvar</button><button type="button" @click="historiaEdicao = null">Cancelar</button></div>
+      </form>
+
+      <div v-if="feature !== null" class="feature">
+        <div class="barra"><b>Arquivo .feature</b>
+          <span><button @click="baixarFeature">Baixar</button> <button @click="feature = null">Fechar</button></span></div>
+        <pre>{{ feature }}</pre>
+      </div>
+
+      <div class="duas-colunas">
+        <!-- Cenários -->
+        <div>
+          <h2>Cenários <small>({{ historia.cenarios.length }})</small></h2>
+          <article v-for="c in historia.cenarios" :key="c.id" class="cenario">
+            <div class="barra">
+              <h3>Cenário: {{ c.titulo }}</h3>
+              <span class="selo" :class="c.origem">{{ rotulo(c.origem) }}</span>
+            </div>
+            <ol class="passos">
+              <li v-for="p in c.passos" :key="p.id" :class="{ recuo: p.tipo === 'E' || p.tipo === 'MAS' }">
+                <span class="kw">{{ p.palavraChave }}</span> {{ p.texto }}
+              </li>
+            </ol>
+            <div class="acoes pequenas">
+              <button @click="editarCenario(c)">Editar</button>
+              <button class="perigo" @click="excluirCenario(c)">Excluir</button>
+            </div>
+          </article>
+
+          <form class="formulario aberto" @submit.prevent="salvarCenario">
+            <h3>{{ cenarioForm.id ? 'Editar cenário' : 'Novo cenário' }}</h3>
+            <label>Título <input v-model="cenarioForm.titulo" placeholder="Ex.: Cenário sem passo Então é rejeitado"></label>
+            <label>Origem
+              <select v-model="cenarioForm.origem"><option value="HUMANO">Humano</option><option value="SUGESTAO_IA">Sugestão de IA</option></select>
+            </label>
+            <div v-for="(p, i) in cenarioForm.passos" :key="i" class="passo-form">
+              <select v-model="p.tipo"><option v-for="t in tipos" :key="t.v" :value="t.v">{{ t.r }}</option></select>
+              <input v-model="p.texto" placeholder="texto do passo">
+              <button type="button" title="Subir" @click="moverPasso(i, -1)" :disabled="i === 0">↑</button>
+              <button type="button" title="Descer" @click="moverPasso(i, 1)" :disabled="i === cenarioForm.passos.length - 1">↓</button>
+              <button type="button" title="Remover" @click="cenarioForm.passos.splice(i, 1)">✕</button>
+            </div>
+            <div class="acoes">
+              <button type="button" @click="cenarioForm.passos.push({ tipo: 'E', texto: '' })">+ Passo</button>
+              <button class="primario">{{ cenarioForm.id ? 'Salvar cenário' : 'Adicionar cenário' }}</button>
+              <button v-if="cenarioForm.id" type="button" @click="limparCenarioForm">Cancelar</button>
+            </div>
+            <p class="dica">Regra 2: ao menos um Quando e um Então, na ordem Dado → Quando → Então. E/Mas não iniciam o cenário. Quem valida é a API.</p>
+          </form>
+        </div>
+
+        <!-- Sugestões -->
+        <div>
+          <h2>Sugestões da IA <small>({{ sugestoes.length }})</small></h2>
+          <div class="barra">
+            <label>Decisão
+              <select v-model="filtroDecisao" @change="carregarSugestoes">
+                <option value="">Todas</option><option>PENDENTE</option><option>ACEITA</option><option>REJEITADA</option>
+              </select>
+            </label>
+          </div>
+          <article v-for="s in sugestoes" :key="s.id" class="sugestao" :class="s.decisao">
+            <div class="barra"><b>{{ s.ferramenta }}</b><span class="selo" :class="s.decisao">{{ s.decisao }}</span></div>
+            <p class="prompt"><span>Prompt:</span> {{ s.prompt }}</p>
+            <p class="conteudo">{{ s.conteudo }}</p>
+            <p v-if="s.decisao !== 'PENDENTE'" class="suave">
+              {{ s.decisao === 'ACEITA' ? 'Aceita' : 'Rejeitada' }} por {{ s.decididaPor }}
+              <template v-if="s.motivoRejeicao"> · motivo {{ rotulo(s.motivoRejeicao) }}</template>
+              <template v-if="s.justificativa"> · “{{ s.justificativa }}”</template>
+            </p>
+            <div v-else class="decisao">
+              <select v-model="decisoes[s.id].motivo">
+                <option value="">Motivo (para rejeitar)</option>
+                <option v-for="m in motivos" :key="m" :value="m">{{ rotulo(m) }}</option>
+              </select>
+              <input v-model="decisoes[s.id].justificativa" placeholder="Justificativa">
+              <div class="acoes pequenas">
+                <button class="primario" @click="aceitar(s)">Aceitar</button>
+                <button class="perigo" @click="rejeitar(s)">Rejeitar</button>
+              </div>
+            </div>
+          </article>
+
+          <form class="formulario aberto" @submit.prevent="registrarSugestao">
+            <h3>Registrar sugestão</h3>
+            <label>Ferramenta <input v-model="sugestaoForm.ferramenta" placeholder="Claude, ChatGPT, Copilot..."></label>
+            <label>Prompt usado <textarea v-model="sugestaoForm.prompt" rows="2"></textarea></label>
+            <label>Conteúdo sugerido <textarea v-model="sugestaoForm.conteudo" rows="3"></textarea></label>
+            <button class="primario">Registrar</button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
